@@ -90,15 +90,15 @@ function RefreshAccount (account, since)
         --print("3. "..v["vehicle"])
         local marketName=v["marketName"]
         local marketPrice=v["marketPrice"]["amount"]
-        -- "date": "2016-02-12T00:00:00.000",
-        local year,month,day=v["marketPrice"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
-        --print (year.."-"..month.."-"..day)
-        if(year)then
-          tradeTimestamp=os.time({year=year,month=month,day=day})
-        end
         for k,v in pairs(v["entries"]) do
           --print ("4. "..v["VEHICLE_DESCRIPTION"])
           if(v["COST_BASIS"])then
+            -- "date": "2016-02-12T00:00:00.000",
+            local year,month,day=v["ALLOC_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+            --print (year.."-"..month.."-"..day)
+            if(year)then
+              tradeTimestamp=os.time({year=year,month=month,day=day})
+            end
             local security={
               -- String name: Bezeichnung des Wertpapiers
               name=v["VEHICLE_DESCRIPTION"],
