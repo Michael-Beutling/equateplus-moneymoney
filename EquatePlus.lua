@@ -17,7 +17,12 @@ function tprint (tbl, indent)
   if not indent then indent = 3 end
   for k, v in pairs(tbl) do
     formatting = string.rep("  ", indent) .. k .. ": "
-    print(formatting .. type(v))
+    append=type(v)
+    if type(v) == 'string' then append="'"..v.."'" end
+    if type(v) == 'number' then append=v end
+    
+    print(formatting .. append)
+    if type(v) == 'table' then tprint(v,indent+3) end
   end
 end
 
@@ -91,8 +96,9 @@ function RefreshAccount (account, since)
         local marketName=v["marketName"]
         local marketPrice=v["marketPrice"]["amount"]
         for k,v in pairs(v["entries"]) do
-          --print ("4. "..v["VEHICLE_DESCRIPTION"])
+          print ("4. "..v["VEHICLE_DESCRIPTION"]..' '..string.rep('#',50))
           if(v["COST_BASIS"])then
+            tprint(v,3)
             -- "date": "2016-02-12T00:00:00.000",
             local year,month,day=v["ALLOC_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
             --print (year.."-"..month.."-"..day)
