@@ -3,7 +3,7 @@ local url="https://www.equateplus.com"
 
 local baseurl
 local reportOnce
-local Version=1.1
+local Version="1.11"
 
 WebBanking{version=Version, url=url,services    = {"EquatePlus"},
   description = "Depot von EquatePlus"}
@@ -72,7 +72,7 @@ function ListAccounts (knownAccounts)
       type = AccountTypePortfolio
     }
   end)--pcall
-  bugReport()
+  bugReport(status,err,user)
   return {account}
 end
 
