@@ -1,9 +1,37 @@
 local url="https://www.equateplus.com"
 --local url="http://localhost/test"
 
-local baseurl
+local baseurl=""
 local reportOnce
-local Version="1.11"
+local Version="1.12"
+local CSRF_TOKEN=nil
+local connection
+
+function connectWithCSRF(method, url, postContent, postContentType, headers)
+  url=baseurl..url
+  postContentType=postContentType or "application/json"
+  local content
+  
+  if headers == nil then
+    headers={}
+  end
+  
+  if CSRF_TOKEN ~= nil then
+    headers['CSRF_TOKEN']=CSRF_TOKEN
+  end
+
+  print(method..": "..url)
+  content, charset, mimeType, filename, headers = connection:request(method, url, postContent, postContentType, headers)
+
+  --print ("headers=")
+  --tprint(headers,3)
+
+  if headers["CSRF_TOKEN"] then
+    CSRF_TOKEN=headers["CSRF_TOKEN"]
+    print("new CSRF_TOKEN"..CSRF_TOKEN)
+  end
+  return content
+end
 
 WebBanking{version=Version, url=url,services    = {"EquatePlus"},
   description = "Depot von EquatePlus"}
@@ -13,7 +41,6 @@ function SupportsBank (protocol, bankCode)
   return  protocol == ProtocolWebBanking and bankCode == "EquatePlus"  -- .
 end
 
-local html
 
 function tprint (tbl, indent)
   if not indent then indent = 3 end
@@ -27,24 +54,28 @@ end
 function InitializeSession (protocol, bankCode, username, username2, password, username3)
 
   -- Login.
+  baseurl=""
+  CSRF_TOKEN=nil
   connection = Connection()
   -- get login page
-  html = HTML(connection:get(url))
+  html = HTML(connectWithCSRF("GET",url))
   -- first login stage
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
   html:xpath("//*[@id='submitField']"):attr("value","Continue Login")
-  html= HTML(connection:request(html:xpath("//*[@id='loginForm']"):submit()))
+  html= HTML(connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit()))
   -- second login stage
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
   html:xpath("//*[@id='eqPwdId']"):attr("value", password)
   html:xpath("//*[@id='submitField']"):attr("value","Continue")
   if html:xpath("//*[@id='loginForm']"):text() == '' then return "EquatePlus plugin error: No login mask found!" end
-  html= HTML(connection:request(html:xpath("//*[@id='loginForm']"):submit()))
-  -- //*[@id="pagefooter"]/div[1]/div[2]/ul/li[2]/ul/li[2]/select
+  content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
+  html= HTML(content)
+
   -- base url
   baseurl=connection:getBaseURL():match('^(.*/)')
   print("baseurl="..baseurl)
-  local boot=JSON(connection:get(baseurl.."services/boot/get")):dictionary()
+
+  local boot=JSON(connectWithCSRF("GET","services/boot/get")):dictionary()
   if(boot["$type"] and boot["user"])then
     return nil
   end
@@ -55,7 +86,7 @@ end
 
 
 function ListAccounts (knownAccounts)
-  local user=JSON(connection:get(baseurl.."services/user/get")):dictionary()
+  local user=JSON(connectWithCSRF("GET","services/user/get")):dictionary()
 
   -- tprint (user)
   -- Return array of accounts.
@@ -77,17 +108,13 @@ function ListAccounts (knownAccounts)
 end
 
 function RefreshAccount (account, since)
-  local summary=JSON(connection:get(baseurl.."services/planSummary/get")):dictionary()
+  local summary=JSON(connectWithCSRF("GET","services/planSummary/get")):dictionary()
   local securities = {}
   reportOnce=true
   local status,err = pcall( function()
     for k,v in pairs(summary["entries"]) do
-      local details=JSON(connection:post(
-        baseurl.."services/planDetails/get",
-        "{\"$type\":\"EntityIdentifier\",\"id\":\""..v["id"].."\"}",
-        "application/json",{["X-Requested-With"]="XMLHttpRequest",["Accept"]="application/json, text/javascript, */*; q=0.01"})
-      ):dictionary()
-    local status,err = pcall( function()
+      local details=JSON(connectWithCSRF("POST","services/planDetails/get","{\"$type\":\"EntityIdentifier\",\"id\":\""..v["id"].."\"}")):dictionary()
+      local status,err = pcall( function()
         for k,v in pairs(details["entries"]) do
           local status,err = pcall( function()
             for k,v in pairs(v["entries"]) do
@@ -163,7 +190,7 @@ end
  
 function EndSession ()
   -- Logout.
-  connection:get(baseurl.."services/participant/logout")
+  connectWithCSRF("GET","services/participant/logout")
 end
 
 
