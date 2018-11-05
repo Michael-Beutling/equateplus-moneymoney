@@ -13,11 +13,13 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
   local content
   
   if headers == nil then
-    headers={}
+    headers={["X-Requested-With"]="XMLHttpRequest" }
   end
   
   if CSRF_TOKEN ~= nil then
     headers['CSRF_TOKEN']=CSRF_TOKEN
+  else
+    print("without CSRF_TOKEN")
   end
 
   print(method..": "..url)
@@ -28,7 +30,7 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
 
   if headers["CSRF_TOKEN"] then
     CSRF_TOKEN=headers["CSRF_TOKEN"]
-    print("new CSRF_TOKEN"..CSRF_TOKEN)
+    print("new CSRF_TOKEN="..CSRF_TOKEN)
   end
   return content
 end
@@ -60,10 +62,12 @@ function InitializeSession (protocol, bankCode, username, username2, password, u
   -- get login page
   html = HTML(connectWithCSRF("GET",url))
   -- first login stage
+  print("login first stage")
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
   html:xpath("//*[@id='submitField']"):attr("value","Continue Login")
   html= HTML(connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit()))
   -- second login stage
+  print("login second stage")
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
   html:xpath("//*[@id='eqPwdId']"):attr("value", password)
   html:xpath("//*[@id='submitField']"):attr("value","Continue")
@@ -75,8 +79,7 @@ function InitializeSession (protocol, bankCode, username, username2, password, u
   baseurl=connection:getBaseURL():match('^(.*/)')
   print("baseurl="..baseurl)
 
-  local boot=JSON(connectWithCSRF("GET","services/boot/get")):dictionary()
-  if(boot["$type"] and boot["user"])then
+  if CSRF_TOKEN ~= nil  then
     return nil
   end
 
