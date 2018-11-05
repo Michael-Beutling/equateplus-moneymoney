@@ -133,6 +133,16 @@ function RefreshAccount (account, since)
                       if(year)then
                         tradeTimestamp=os.time({year=year,month=month,day=day})
                       end
+                      local qty=0
+                      --tprint(v,3)
+                      if v["AVAIL_QTY"] and v["AVAIL_QTY"]["amount"] then
+                        qty=v["AVAIL_QTY"]["amount"]
+                      end
+
+                      if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
+                        qty=qty+v["LOCKED_QTY"]["amount"]
+                      end
+                      
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
                         name=v["VEHICLE_DESCRIPTION"],
@@ -144,7 +154,7 @@ function RefreshAccount (account, since)
           
                         -- String currency: Währung bei Nominalbetrag oder nil bei Stückzahl
                         -- Number quantity: Nominalbetrag oder Stückzahl
-                        quantity=v["AVAIL_QTY"]["amount"],
+                        quantity=qty,
           
                         -- Number amount: Wert der Depotposition in Kontowährung
                         -- Number originalCurrencyAmount: Wert der Depotposition in Originalwährung
