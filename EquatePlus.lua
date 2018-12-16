@@ -3,34 +3,49 @@ local url="https://www.equateplus.com"
 
 local baseurl=""
 local reportOnce
-local Version="1.12"
+local Version="1.13"
 local CSRF_TOKEN=nil
+local csrfpId=nil
 local connection
+local debugging=false
 
 function connectWithCSRF(method, url, postContent, postContentType, headers)
   url=baseurl..url
+  -- print("baseurl="..baseurl)
   postContentType=postContentType or "application/json"
   local content
-  
+
   if headers == nil then
     headers={["X-Requested-With"]="XMLHttpRequest" }
   end
-  
+
   if CSRF_TOKEN ~= nil then
     headers['CSRF_TOKEN']=CSRF_TOKEN
   else
     print("without CSRF_TOKEN")
   end
+  if method == 'POST' then
+    -- lprint(postContent)
+    if csrfpId ~= nil then
+      postContent=postContent.."&csrfpId="..csrfpId
+    end
+  end
 
-  print(method..": "..url)
   content, charset, mimeType, filename, headers = connection:request(method, url, postContent, postContentType, headers)
-
-  --print ("headers=")
-  --tprint(headers,3)
-
+  csrfpIdTemp=string.match(content,"\"csrfpId\" *, *\"([^\"]+)\"")
+  if csrfpIdTemp ~= '' then
+    csrfpId=csrfpIdTemp
+  end
+  if debugging then
+    -- tprint(headers)
+    -- lprint(content)
+  else
+    --print "no debug"
+  end
   if headers["CSRF_TOKEN"] then
     CSRF_TOKEN=headers["CSRF_TOKEN"]
-    print("new CSRF_TOKEN="..CSRF_TOKEN)
+    -- print("new CSRF_TOKEN="..CSRF_TOKEN)
+    -- if debugging then print("new CSRF_TOKEN") end
   end
   return content
 end
@@ -43,29 +58,50 @@ function SupportsBank (protocol, bankCode)
   return  protocol == ProtocolWebBanking and bankCode == "EquatePlus"  -- .
 end
 
+function lprint(text)
+  repeat
+    print("  ",string.sub(text,1,60))
+    text=string.sub(text,61)
+  until text == ''
+end
 
 function tprint (tbl, indent)
   if not indent then indent = 3 end
   for k, v in pairs(tbl) do
     formatting = string.rep(" ", indent) .. k .. ": "
-    print(formatting .. type(v))
+    --if debugging and (type(v) == 'string') then
+    --  print(formatting .. type(v).."'"..v.."'")
+    --else
+      print(formatting .. type(v))
+    --end
     if type(v) == 'table' and indent < 9 then tprint(v,indent+3) end
   end
 end
 
 function InitializeSession (protocol, bankCode, username, username2, password, username3)
 
+
   -- Login.
   baseurl=""
+  debugging=false
   CSRF_TOKEN=nil
+  csrfpId=nil
   connection = Connection()
+  if string.sub(username,1,1) == '#' then
+    print("Debugging, remove # char from username.")
+    username=string.sub(username,2)
+    debugging=true
+  end
+  print("username="..username)
   -- get login page
   html = HTML(connectWithCSRF("GET",url))
+  -- tprint(html)
   -- first login stage
   print("login first stage")
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
   html:xpath("//*[@id='submitField']"):attr("value","Continue Login")
   html= HTML(connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit()))
+  -- tprint(html)
   -- second login stage
   print("login second stage")
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
@@ -91,7 +127,7 @@ end
 function ListAccounts (knownAccounts)
   local user=JSON(connectWithCSRF("GET","services/user/get")):dictionary()
 
-  -- tprint (user)
+  if debugging then tprint (user) end
   -- Return array of accounts.
   reportOnce=true
   local account
@@ -112,11 +148,13 @@ end
 
 function RefreshAccount (account, since)
   local summary=JSON(connectWithCSRF("GET","services/planSummary/get")):dictionary()
+  if debugging then tprint (summary) end
   local securities = {}
   reportOnce=true
   local status,err = pcall( function()
     for k,v in pairs(summary["entries"]) do
       local details=JSON(connectWithCSRF("POST","services/planDetails/get","{\"$type\":\"EntityIdentifier\",\"id\":\""..v["id"].."\"}")):dictionary()
+      if debugging then tprint (details) end
       local status,err = pcall( function()
         for k,v in pairs(details["entries"]) do
           local status,err = pcall( function()
@@ -134,7 +172,6 @@ function RefreshAccount (account, since)
                         tradeTimestamp=os.time({year=year,month=month,day=day})
                       end
                       local qty=0
-                      --tprint(v,3)
                       if v["AVAIL_QTY"] and v["AVAIL_QTY"]["amount"] then
                         qty=v["AVAIL_QTY"]["amount"]
                       end
@@ -142,36 +179,36 @@ function RefreshAccount (account, since)
                       if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
                         qty=qty+v["LOCKED_QTY"]["amount"]
                       end
-                      
+
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
                         name=v["VEHICLE_DESCRIPTION"],
-          
+
                         -- String isin: ISIN
                         -- String securityNumber: WKN
                         -- String market: Börse
                         market=marketName,
-          
+
                         -- String currency: Währung bei Nominalbetrag oder nil bei Stückzahl
                         -- Number quantity: Nominalbetrag oder Stückzahl
                         quantity=qty,
-          
+
                         -- Number amount: Wert der Depotposition in Kontowährung
                         -- Number originalCurrencyAmount: Wert der Depotposition in Originalwährung
                         -- Number exchangeRate: Wechselkurs
-          
+
                         -- Number tradeTimestamp: Notierungszeitpunkt; Die Angabe erfolgt in Form eines POSIX-Zeitstempels.
                         tradeTimestamp=tradeTimestamp,
-          
+
                         -- Number price: Aktueller Preis oder Kurs
                         price=marketPrice,
-          
+
                         -- String currencyOfPrice: Von der Kontowährung abweichende Währung des Preises.
                         -- Number purchasePrice: Kaufpreis oder Kaufkurs
                         purchasePrice=v["COST_BASIS"]["amount"],
-          
+
                       -- String currencyOfPurchasePrice: Von der Kontowährung abweichende Währung des Kaufpreises.
-          
+
                       }
                       table.insert(securities,security)
                     end
@@ -181,8 +218,8 @@ function RefreshAccount (account, since)
               end)--pcall
               bugReport(status,err,v)
             end
-           end) --pcall
-           bugReport(status,err,v)
+          end) --pcall
+          bugReport(status,err,v)
         end
       end) --pcall
       bugReport(status,err,v)
@@ -200,7 +237,7 @@ function bugReport(status,err,v)
     print (string.rep('#',25).." 8< please report this bug version="..Version.." >8 "..string.rep('#',25))
   end
 end
- 
+
 function EndSession ()
   -- Logout.
   connectWithCSRF("GET","services/participant/logout")
