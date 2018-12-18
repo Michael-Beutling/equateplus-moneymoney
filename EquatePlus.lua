@@ -3,11 +3,12 @@ local url="https://www.equateplus.com"
 
 local baseurl=""
 local reportOnce
-local Version="1.13"
+local Version="1.14"
 local CSRF_TOKEN=nil
 local csrfpId=nil
 local connection
 local debugging=false
+local cummulate=false
 
 function connectWithCSRF(method, url, postContent, postContentType, headers)
   url=baseurl..url
@@ -37,10 +38,10 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
     csrfpId=csrfpIdTemp
   end
   if debugging then
-    -- tprint(headers)
-    -- lprint(content)
+  -- tprint(headers)
+  -- lprint(content)
   else
-    --print "no debug"
+  --print "no debug"
   end
   if headers["CSRF_TOKEN"] then
     CSRF_TOKEN=headers["CSRF_TOKEN"]
@@ -50,12 +51,12 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
   return content
 end
 
-WebBanking{version=Version, url=url,services    = {"EquatePlus"},
+WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cumulative)"},
   description = "Depot von EquatePlus"}
 
 
 function SupportsBank (protocol, bankCode)
-  return  protocol == ProtocolWebBanking and bankCode == "EquatePlus"  -- .
+  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus"  or bankCode == "EquatePlus (cumulative)") 
 end
 
 function lprint(text)
@@ -72,7 +73,7 @@ function tprint (tbl, indent)
     --if debugging and (type(v) == 'string') then
     --  print(formatting .. type(v).."'"..v.."'")
     --else
-      print(formatting .. type(v))
+    print(formatting .. type(v))
     --end
     if type(v) == 'table' and indent < 9 then tprint(v,indent+3) end
   end
@@ -84,26 +85,32 @@ function InitializeSession (protocol, bankCode, username, username2, password, u
   -- Login.
   baseurl=""
   debugging=false
+  cummulate=false
   CSRF_TOKEN=nil
   csrfpId=nil
   connection = Connection()
+  
+  if bankCode == "EquatePlus (cumulative)" then
+    cummulate=true
+  end
+  
   if string.sub(username,1,1) == '#' then
     print("Debugging, remove # char from username.")
     username=string.sub(username,2)
     debugging=true
   end
-  print("username="..username)
+  -- print("username="..username)
   -- get login page
   html = HTML(connectWithCSRF("GET",url))
   -- tprint(html)
   -- first login stage
-  print("login first stage")
+  -- print("login first stage")
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
   html:xpath("//*[@id='submitField']"):attr("value","Continue Login")
   html= HTML(connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit()))
   -- tprint(html)
   -- second login stage
-  print("login second stage")
+  -- print("login second stage")
   html:xpath("//*[@id='eqUserId']"):attr("value", username)
   html:xpath("//*[@id='eqPwdId']"):attr("value", password)
   html:xpath("//*[@id='submitField']"):attr("value","Continue")
@@ -179,7 +186,6 @@ function RefreshAccount (account, since)
                       if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
                         qty=qty+v["LOCKED_QTY"]["amount"]
                       end
-
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
                         name=v["VEHICLE_DESCRIPTION"],
@@ -210,7 +216,20 @@ function RefreshAccount (account, since)
                       -- String currencyOfPurchasePrice: Von der Kontowährung abweichende Währung des Kaufpreises.
 
                       }
-                      table.insert(securities,security)
+                      if cummulate then
+                        name='_'..v["VEHICLE_DESCRIPTION"]
+                        if securities[name] == nil then
+                          security['sumPrice']=security['purchasePrice']*qty
+                          securities[name]=security
+                          table.insert(securities,security)
+                        else
+                          securities[name]['sumPrice']=securities[name]['sumPrice']+security['purchasePrice']*qty
+                          securities[name]['quantity']=securities[name]['quantity']+qty
+                          securities[name]['purchasePrice']=securities[name]['sumPrice']/securities[name]['quantity']
+                        end
+                      else
+                        table.insert(securities,security)
+                      end
                     end
                   end) --pcall
                   bugReport(status,err,v)
