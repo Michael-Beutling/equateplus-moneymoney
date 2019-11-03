@@ -3,12 +3,14 @@ local url="https://www.equateplus.com"
 
 local baseurl=""
 local reportOnce
-local Version="1.14"
+local Version="1.15"
 local CSRF_TOKEN=nil
 local csrfpId=nil
 local connection
 local debugging=false
+local nosecrets=false
 local cummulate=false
+local html
 
 function connectWithCSRF(method, url, postContent, postContentType, headers)
   url=baseurl..url
@@ -67,69 +69,104 @@ function lprint(text)
 end
 
 function tprint (tbl, indent)
-  if not indent then indent = 3 end
-  for k, v in pairs(tbl) do
-    formatting = string.rep(" ", indent) .. k .. ": "
-    --if debugging and (type(v) == 'string') then
-    --  print(formatting .. type(v).."'"..v.."'")
-    --else
-    print(formatting .. type(v))
-    --end
-    if type(v) == 'table' and indent < 9 then tprint(v,indent+3) end
-  end
+  if debugging then
+    if not indent then indent = 3 end
+    for k, v in pairs(tbl) do
+      formatting = string.rep(" ", indent) .. k .. ": "
+      if nosecrets and (type(v) == 'string') then
+        print(formatting .. type(v).."'"..v.."'")
+      else
+        print(formatting .. type(v))
+      end
+      if type(v) == 'table' and indent < 9 then tprint(v,indent+3) end
+    end
+  end 
 end
 
-function InitializeSession (protocol, bankCode, username, username2, password, username3)
+function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
+
+  if step==1 then
+    -- Login.
+    baseurl=""
+    debugging=false
+    cummulate=false
+    CSRF_TOKEN=nil
+    csrfpId=nil
+    connection = Connection()
+    
+    username=credentials[1]
+    password=credentials[2]
+      
+    if bankCode == "EquatePlus (cumulative)" then
+      cummulate=true
+    end
+    
+    if string.sub(username,1,1) == '#' then
+      print("Debugging, remove # char from username!")
+      username=string.sub(username,2)
+      debugging=true
+    end
+
+    if string.sub(username,1,1) == '#' then
+      print("Debugging, remove # chars from username!")
+      username=string.sub(username,2)
+      nosecrets=true
+    end
 
 
-  -- Login.
-  baseurl=""
-  debugging=false
-  cummulate=false
-  CSRF_TOKEN=nil
-  csrfpId=nil
-  connection = Connection()
+    -- get login page
+    html = HTML(connectWithCSRF("GET",url))
+    if html:xpath("//*[@id='loginForm']"):text() == '' then return "EquatePlus plugin error: No login mask found!" end
+
+    -- first login stage
+    -- print("login first stage")
+    html:xpath("//*[@id='eqUserId']"):attr("value", username)
+    html:xpath("//*[@id='submitField']"):attr("value","Continue Login")
+    html= HTML(connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit()))
+    if html:xpath("//*[@id='loginForm']"):text() == '' then return "EquatePlus plugin error: No login mask found!" end
+
+    -- second login stage
+    -- print("login second stage")
+    html:xpath("//*[@id='eqUserId']"):attr("value", username)
+    html:xpath("//*[@id='eqPwdId']"):attr("value", password)
+    html:xpath("//*[@id='submitField']"):attr("value","Continue")
+    
+    content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
+    html= HTML(content)
+    
+    -- 2.FA cuiMessages
+    if html:xpath("//*[@class='cuiMessageConfirmBorder']"):text() ~= nil then
+      print(html:xpath("//*[@class='cuiMessageConfirmBorder']"):text()) 
+      return {
+        title='PSD2 Thank you very much!',
+        challenge=html:xpath("//*[@class='cuiMessageConfirmBorder']"):text(),
+        label='Code'
+      } 
+    else
+      -- no code = success?
+      return nil
+    end
+
+  else
+    -- enter code
+    html:xpath("//*[@id='otpCodeId']"):attr("value", credentials[1])
+    html:xpath("//*[@id='submitField']"):attr("value","verify")
+    content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
+
+    -- base url
+    baseurl=connection:getBaseURL():match('^(.*/)')
+    print("baseurl="..baseurl)
+
+    if CSRF_TOKEN ~= nil  then
+      return nil
+    else
+      return "Wrong 2FA code!"
+    end
+    
+  end    
   
-  if bankCode == "EquatePlus (cumulative)" then
-    cummulate=true
-  end
-  
-  if string.sub(username,1,1) == '#' then
-    print("Debugging, remove # char from username.")
-    username=string.sub(username,2)
-    debugging=true
-  end
-  -- print("username="..username)
-  -- get login page
-  html = HTML(connectWithCSRF("GET",url))
-  -- tprint(html)
-  -- first login stage
-  -- print("login first stage")
-  html:xpath("//*[@id='eqUserId']"):attr("value", username)
-  html:xpath("//*[@id='submitField']"):attr("value","Continue Login")
-  html= HTML(connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit()))
-  -- tprint(html)
-  -- second login stage
-  -- print("login second stage")
-  html:xpath("//*[@id='eqUserId']"):attr("value", username)
-  html:xpath("//*[@id='eqPwdId']"):attr("value", password)
-  html:xpath("//*[@id='submitField']"):attr("value","Continue")
-  if html:xpath("//*[@id='loginForm']"):text() == '' then return "EquatePlus plugin error: No login mask found!" end
-  content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
-  html= HTML(content)
-
-  -- base url
-  baseurl=connection:getBaseURL():match('^(.*/)')
-  print("baseurl="..baseurl)
-
-  if CSRF_TOKEN ~= nil  then
-    return nil
-  end
-
-  return LoginFailed
+  return LoginFailed  
 end
-
-
 
 function ListAccounts (knownAccounts)
   local user=JSON(connectWithCSRF("GET","services/user/get")):dictionary()
