@@ -3,7 +3,7 @@ local url="https://www.equateplus.com"
 
 local baseurl=""
 local reportOnce
-local Version="1.15"
+local Version="1.16"
 local CSRF_TOKEN=nil
 local csrfpId=nil
 local connection
@@ -135,15 +135,18 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     html= HTML(content)
     
     -- 2.FA cuiMessages
-    if html:xpath("//*[@class='cuiMessageConfirmBorder']"):text() ~= nil then
+    if html:xpath("//*[@class='cuiMessageConfirmBorder']"):text() ~= "" then
       print(html:xpath("//*[@class='cuiMessageConfirmBorder']"):text()) 
       return {
-        title='PSD2 Thank you very much!',
+        title='Two-factor authentication',
         challenge=html:xpath("//*[@class='cuiMessageConfirmBorder']"):text(),
         label='Code'
       } 
     else
-      -- no code = success?
+      -- base url
+      baseurl=connection:getBaseURL():match('^(.*/)')
+      print("baseurl="..baseurl)
+      -- no code = success
       return nil
     end
 
