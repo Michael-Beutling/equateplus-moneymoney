@@ -3,7 +3,7 @@ local url="https://www.equateplus.com"
 
 local baseurl=""
 local reportOnce
-local Version="1.16"
+local Version="1.17"
 local CSRF_TOKEN=nil
 local csrfpId=nil
 local connection
@@ -11,6 +11,7 @@ local debugging=false
 local nosecrets=false
 local cummulate=false
 local html
+local debugfile
 
 function connectWithCSRF(method, url, postContent, postContentType, headers)
   url=baseurl..url
@@ -53,12 +54,12 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
   return content
 end
 
-WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cumulative)"},
+WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cumulative)","EquatePlus (Debug1, don't use!)","EquatePlus (Debug2, don't use!)"},
   description = "Depot von EquatePlus"}
 
 
 function SupportsBank (protocol, bankCode)
-  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus"  or bankCode == "EquatePlus (cumulative)") 
+  return  protocol == ProtocolWebBanking and ("EquatePlus" == bankCode:sub(1,#"EquatePlus")) 
 end
 
 function lprint(text)
@@ -66,6 +67,36 @@ function lprint(text)
     print("  ",string.sub(text,1,60))
     text=string.sub(text,61)
   until text == ''
+end
+
+function twritetext(text)
+  if debugging then
+    i=40-string.len(text)
+    if i<0 then i=0 end
+    debugfile:write("\n")
+    debugfile:write(string.rep("#",i).." "..text.." "..string.rep("#",i), "\n")
+    debugfile:write("\n")
+  end 
+end
+
+function twritedebug (tbl, prefix)
+  if debugging then
+    if not prefix then prefix = "" end
+    for k, v in pairs(tbl) do
+      formatting = prefix .."." .. k .. ": "
+      if nosecrets and (type(v) == 'string') then
+        debugfile:write(formatting .. type(v).."='"..v.."'", "\n")
+      elseif type(v) == 'table'  then 
+        twritedebug(v,prefix.."."..k)
+      elseif type(v) == 'boolean'  then
+        debugfile:write(formatting .. type(v).."="..tostring(v), "\n")
+      elseif type(v) == 'number'  then
+        debugfile:write(formatting .. type(v).."="..tostring(v), "\n")
+      else
+        debugfile:write(formatting .. type(v), "\n")
+      end
+    end
+  end 
 end
 
 function tprint (tbl, indent)
@@ -97,20 +128,17 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     username=credentials[1]
     password=credentials[2]
       
-    if bankCode == "EquatePlus (cumulative)" then
+    if string.match(bankCode,"cumulative") then
       cummulate=true
     end
     
-    if string.sub(username,1,1) == '#' then
-      print("Debugging, remove # char from username!")
-      username=string.sub(username,2)
+    if string.match(bankCode,"Debug") then
       debugging=true
-    end
-
-    if string.sub(username,1,1) == '#' then
-      print("Debugging, remove # chars from username!")
-      username=string.sub(username,2)
-      nosecrets=true
+      debugfile=io.open("debug_EquatePlus.txt","w")
+      twritetext("Start")
+      if string.match(bankCode,"Debug2") then
+        nosecrets=true
+      end
     end
 
 
@@ -173,14 +201,16 @@ end
 
 function ListAccounts (knownAccounts)
   local user=JSON(connectWithCSRF("GET","services/user/get")):dictionary()
-
-  if debugging then tprint (user) end
+  twritetext("List accounts")
+  twritedebug(user,"ListAccounts:")
   -- Return array of accounts.
   reportOnce=true
+  postfix=""
+  if debug then postfix=" Debug" end
   local account
   local status,err = pcall( function()
     account = {
-      name = "Equateplus "..user["companyId"],
+      name = "Equateplus "..user["companyId"]..postfix,
       --owner = user["participant"]["firstName"]["displayValue"].." "..user["participant"]["lastName"]["displayValue"],
       accountNumber = user["participant"]["userId"],
       bankCode = "equatePlus",
@@ -195,13 +225,15 @@ end
 
 function RefreshAccount (account, since)
   local summary=JSON(connectWithCSRF("GET","services/planSummary/get")):dictionary()
-  if debugging then tprint (summary) end
+  twritetext("Summary")
+  twritedebug (summary,"Summary:")
   local securities = {}
   reportOnce=true
   local status,err = pcall( function()
     for k,v in pairs(summary["entries"]) do
       local details=JSON(connectWithCSRF("POST","services/planDetails/get","{\"$type\":\"EntityIdentifier\",\"id\":\""..v["id"].."\"}")):dictionary()
-      if debugging then tprint (details) end
+      twritetext("Details:"..v["id"])
+      twritedebug (details,"Details "..v["id"]..":")
       local status,err = pcall( function()
         for k,v in pairs(details["entries"]) do
           local status,err = pcall( function()
@@ -285,6 +317,11 @@ function RefreshAccount (account, since)
     end
   end) --pcall
   bugReport(status,err,v)
+  twritetext("Results")
+  twritedebug(securities,"Result:")
+  if debugging then
+    debugfile:close()
+  end  
   return {securities=securities}
 end
 
