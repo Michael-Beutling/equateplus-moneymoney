@@ -258,9 +258,16 @@ function RefreshAccount (account, since)
                       if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
                         qty=qty+v["LOCKED_QTY"]["amount"]
                       end
+                      local secName=""
+                      if v["VEHICLE_DESCRIPTION"] ~= nil then
+                        secName=v["VEHICLE_DESCRIPTION"]
+                      elseif v["PLAN_DESCRIPTION"] ~= nil then
+                        secName=v["PLAN_DESCRIPTION"] --..": "..v["ELECTION_CONTRIBUTION_TYPE"]
+                      end
+                      twritedebug("secName after:"..secName)
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
-                        name=v["VEHICLE_DESCRIPTION"],
+                        name=secName,
 
                         -- String isin: ISIN
                         -- String securityNumber: WKN
