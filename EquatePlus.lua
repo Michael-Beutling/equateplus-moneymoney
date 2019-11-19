@@ -236,6 +236,8 @@ function RefreshAccount (account, since)
       twritedebug (details,"Details "..v["id"]..":")
       local status,err = pcall( function()
         for k,v in pairs(details["entries"]) do
+          -- Required for Allianz Employee Shares
+          local contribType = {}
           local status,err = pcall( function()
             for k,v in pairs(v["entries"]) do
               local status,err = pcall( function()
@@ -243,6 +245,10 @@ function RefreshAccount (account, since)
                 local marketPrice=v["marketPrice"]["amount"]
                 for k,v in pairs(v["entries"]) do
                   local status,err = pcall( function()
+                    if(v["ELECTION_CONTRIBUTION_TYPE"])then
+                      contribType[k]=v["ELECTION_CONTRIBUTION_TYPE"]
+                      twritetext("ELECTION_CONTRIBUTION_TYPE exists")
+                    end
                     if(v["COST_BASIS"])then
                       -- "date": "2016-02-12T00:00:00.000",
                       local year,month,day=v["ALLOC_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
@@ -263,8 +269,10 @@ function RefreshAccount (account, since)
                         secName=v["VEHICLE_DESCRIPTION"]
                       elseif v["PLAN_DESCRIPTION"] ~= nil then
                         secName=v["PLAN_DESCRIPTION"] --..": "..v["ELECTION_CONTRIBUTION_TYPE"]
+                        if contribType[k] ~= nil then
+                          secName=secName.." ("..contribType[k]..")"
+                        end
                       end
-                      twritedebug("secName after:"..secName)
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
                         name=secName,
