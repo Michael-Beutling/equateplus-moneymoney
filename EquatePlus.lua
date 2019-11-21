@@ -8,7 +8,8 @@ local CSRF_TOKEN=nil
 local csrfpId=nil
 local connection
 local debugging=false
-local nosecrets=false
+local anonymous
+local anonymousCount
 local cummulate=false
 local html
 local debugfile
@@ -54,7 +55,7 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
   return content
 end
 
-WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cumulative)","EquatePlus (Debug1, don't use!)","EquatePlus (Debug2, don't use!)"},
+WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cumulative)","EquatePlus (Debug, don't use!)"},
   description = "Depot von EquatePlus"}
 
 
@@ -79,37 +80,92 @@ function twritetext(text)
   end 
 end
 
+function makeAnonymous(v,prefix)
+  if anonymous[tostring(v)] ~= nil then
+    return anonymous[tostring(v)]
+  end
+  anonymousCount=anonymousCount+1
+  if prefix == nil then
+    prefix="_V"
+  end 
+  s=prefix..tostring(anonymousCount)
+  anonymous[tostring(v)]=s
+  -- debugfile:write("'",v,"' = ",s,"\n")
+  return s
+end
+
+function writeSecrets()
+  if debug then
+    secretFile=io.open("debug_EquatePlus_secrets.txt","w")
+    for k,v in pairs(anonymous) do
+      if k ~= v then 
+        secretFile:write("'",k,"' = ",v,"\n")
+      end
+    end
+    secretFile:close()
+    anonymous=nil
+  end 
+end
+
+
+-- whitelist node names 
+function twritedebugNodes (tbl)
+    for k, v in pairs(tbl) do
+      anonymous[k]=k
+      if type(v) == 'table'  then 
+        twritedebugNodes(v)
+      end
+    end
+end
+
+function twritedebugWorker (tbl, prefix)
+    for k, v in pairs(tbl) do
+      formatting = prefix .."." .. k .. ": "
+      if (type(v) == 'string') then
+        -- debugfile:write(formatting, type(v), "='", v, "'", "\n")
+        if k ~= "id" then
+          debugfile:write(formatting, type(v), "='", makeAnonymous(v), "'", "\n")
+        else
+          debugfile:write(formatting, type(v), "='", makeAnonymous(v,"_I"), "'", "\n")
+        end
+      elseif type(v) == 'table'  then 
+        twritedebugWorker(v,prefix.."."..k)
+      elseif type(v) == 'boolean'  then
+        debugfile:write(formatting,type(v),"=",tostring(v), "\n")
+      elseif type(v) == 'number'  then
+        -- debugfile:write(formatting,type(v).."="..v, "\n")
+        debugfile:write(formatting,type(v),"=",makeAnonymous(v), "\n")
+      else
+        debugfile:write(formatting,type(v), "\n")
+      end
+    end
+end
+
 function twritedebug (tbl, prefix)
   if debugging then
     if not prefix then prefix = "" end
-    for k, v in pairs(tbl) do
-      formatting = prefix .."." .. k .. ": "
-      if nosecrets and (type(v) == 'string') then
-        debugfile:write(formatting .. type(v).."='"..v.."'", "\n")
-      elseif type(v) == 'table'  then 
-        twritedebug(v,prefix.."."..k)
-      elseif type(v) == 'boolean'  then
-        debugfile:write(formatting .. type(v).."="..tostring(v), "\n")
-      elseif type(v) == 'number'  then
-        debugfile:write(formatting .. type(v).."="..tostring(v), "\n")
-      else
-        debugfile:write(formatting .. type(v), "\n")
-      end
+    twritedebugNodes(tbl,prefix)
+    -- remove numbers
+    for v,k in ipairs(anonymous) do
+      anonymous[k]=nil
     end
+    --for v,k in pairs(anonymous) do
+      --debugfile:write("'",k,"' = ",v,"\n")
+    --end
+    
+    twritedebugWorker(tbl,prefix)
   end 
 end
 
 function tprint (tbl, indent)
   if debugging then
-    if not indent then indent = 3 end
+    if not indent then indent = 0 end
+    formatting = string.rep(" ", indent) 
     for k, v in pairs(tbl) do
-      formatting = string.rep(" ", indent) .. k .. ": "
-      if nosecrets and (type(v) == 'string') then
-        print(formatting .. type(v).."'"..v.."'")
-      else
-        print(formatting .. type(v))
+      print(formatting .. k .. ": " .. type(v))
+      if type(v) == 'table' and indent < 15 then 
+        tprint(v,indent+3) 
       end
-      if type(v) == 'table' and indent < 9 then tprint(v,indent+3) end
     end
   end 
 end
@@ -124,6 +180,8 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     CSRF_TOKEN=nil
     csrfpId=nil
     connection = Connection()
+    anonymous={}
+    anonymousCount=0
     
     username=credentials[1]
     password=credentials[2]
@@ -136,9 +194,6 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
       debugging=true
       debugfile=io.open("debug_EquatePlus.txt","w")
       twritetext("Start")
-      if string.match(bankCode,"Debug2") then
-        nosecrets=true
-      end
     end
 
 
@@ -232,8 +287,8 @@ function RefreshAccount (account, since)
   local status,err = pcall( function()
     for k,v in pairs(summary["entries"]) do
       local details=JSON(connectWithCSRF("POST","services/planDetails/get","{\"$type\":\"EntityIdentifier\",\"id\":\""..v["id"].."\"}")):dictionary()
-      twritetext("Details:"..v["id"])
-      twritedebug (details,"Details "..v["id"]..":")
+      twritetext("Details:"..makeAnonymous(v["id"]))
+      twritedebug (details,"Details "..makeAnonymous(v["id"])..":")
       local status,err = pcall( function()
         for k,v in pairs(details["entries"]) do
           local status,err = pcall( function()
@@ -264,7 +319,6 @@ function RefreshAccount (account, since)
                       elseif v["PLAN_DESCRIPTION"] ~= nil then
                         secName=v["PLAN_DESCRIPTION"] --..": "..v["ELECTION_CONTRIBUTION_TYPE"]
                       end
-                      twritedebug("secName after:"..secName)
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
                         name=secName,
@@ -328,6 +382,7 @@ function RefreshAccount (account, since)
   twritedebug(securities,"Result:")
   if debugging then
     debugfile:close()
+    writeSecrets()
   end  
   return {securities=securities}
 end
