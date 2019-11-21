@@ -274,7 +274,7 @@ function ListAccounts (knownAccounts)
       type = AccountTypePortfolio
     }
   end)--pcall
-  bugReport(status,err,user)
+  bugReport(status,err,user,1)
   return {account}
 end
 
@@ -365,19 +365,19 @@ function RefreshAccount (account, since)
                       end
                     end
                   end) --pcall
-                  bugReport(status,err,v)
+                  bugReport(status,err,v,2)
                 end
               end)--pcall
-              bugReport(status,err,v)
+              bugReport(status,err,v,3)
             end
           end) --pcall
-          bugReport(status,err,v)
+          bugReport(status,err,v,4)
         end
       end) --pcall
-      bugReport(status,err,v)
+      bugReport(status,err,v,5)
     end
   end) --pcall
-  bugReport(status,err,v)
+  bugReport(status,err,v,6)
   twritetext("Results")
   twritedebug(securities,"Result:")
   if debugging then
@@ -387,12 +387,12 @@ function RefreshAccount (account, since)
   return {securities=securities}
 end
 
-function bugReport(status,err,v)
+function bugReport(status,err,v,identifier)
   if not status and reportOnce then
     reportOnce=false
     print (string.rep('#',25).." 8< please report this bug = '"..err.."' >8 "..string.rep('#',25))
     tprint(v)
-    print (string.rep('#',25).." 8< please report this bug version="..Version.." >8 "..string.rep('#',25))
+    print (string.rep('#',25).." 8< please report this bug version="..Version.." identifier="..identifier.." >8 "..string.rep('#',25))
   end
 end
 
