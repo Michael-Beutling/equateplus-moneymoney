@@ -297,37 +297,44 @@ function RefreshAccount (account, since)
             for k,v in pairs(v["entries"]) do
               local status,err = pcall( function()
                 local marketName=v["marketName"]
-                local marketPrice=v["marketPrice"]["amount"]
+                local marketPrice=0
+                if v["marketPrice"] ~= nil then
+                  marketPrice=v["marketPrice"]["amount"]
+                end
                 for k,v in pairs(v["entries"]) do
                   local status,err = pcall( function()
                     if(v["ELECTION_CONTRIBUTION_TYPE"])then
                       contribType[k]=v["ELECTION_CONTRIBUTION_TYPE"]
-                      twritetext("ELECTION_CONTRIBUTION_TYPE exists")
+                      --twritetext("ELECTION_CONTRIBUTION_TYPE exists")
                     end
                     if(v["COST_BASIS"])then
+                    
                       -- "date": "2016-02-12T00:00:00.000",
                       local year,month,day=v["ALLOC_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
                       --print (year.."-"..month.."-"..day)
                       if(year)then
                         tradeTimestamp=os.time({year=year,month=month,day=day})
                       end
+                      
                       local qty=0
                       if v["AVAIL_QTY"] and v["AVAIL_QTY"]["amount"] then
                         qty=v["AVAIL_QTY"]["amount"]
                       end
-
                       if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
                         qty=qty+v["LOCKED_QTY"]["amount"]
                       end
+           
                       local secName=""
                       if v["VEHICLE_DESCRIPTION"] ~= nil then
                         secName=v["VEHICLE_DESCRIPTION"]
                       elseif v["PLAN_DESCRIPTION"] ~= nil then
                         secName=v["PLAN_DESCRIPTION"] --..": "..v["ELECTION_CONTRIBUTION_TYPE"]
-                        if contribType[k] ~= nil then
-                          secName=secName.." ("..contribType[k]..")"
-                        end
                       end
+                        
+                      if contribType[k] ~= nil then
+                        secName=secName.." ("..contribType[k]..")"
+                      end
+           
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
                         name=secName,
