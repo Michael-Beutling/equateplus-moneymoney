@@ -1,18 +1,14 @@
 local url="https://www.equateplus.com"
---local url="http://localhost/test"
 
 local baseurl=""
 local reportOnce
-local Version="1.17"
-local CSRF_TOKEN=nil
-local csrfpId=nil
+local Version="1.18"
 local connection
-local debugging=false
-local anonymous
-local anonymousCount
 local cummulate=false
+local addToHeader
 local html
-local debugfile
+local loginSuccess=false
+
 
 function connectWithCSRF(method, url, postContent, postContentType, headers)
   url=baseurl..url
@@ -23,35 +19,32 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
   if headers == nil then
     headers={["X-Requested-With"]="XMLHttpRequest" }
   end
-
-  if CSRF_TOKEN ~= nil then
-    headers['CSRF_TOKEN']=CSRF_TOKEN
-  else
-    print("without CSRF_TOKEN")
+  
+  for k,v in pairs(addToHeader) do
+    headers[k]=v 
+    --print("addHeader ",k,"=",v)
   end
-  if method == 'POST' then
-    -- lprint(postContent)
-    if csrfpId ~= nil then
-      postContent=postContent.."&csrfpId="..csrfpId
-    end
-  end
-
-  content, charset, mimeType, filename, headers = connection:request(method, url, postContent, postContentType, headers)
-  csrfpIdTemp=string.match(content,"\"csrfpId\" *, *\"([^\"]+)\"")
-  if csrfpIdTemp ~= '' then
-    csrfpId=csrfpIdTemp
-  end
-  if debugging then
-  -- tprint(headers)
-  -- lprint(content)
-  else
-  --print "no debug"
-  end
+  
+  
+  local cached=false
+  local content, charset, mimeType, filename
+  content, charset, mimeType, filename, headers = connection:request(method, url, postContent, postContentType, headers) 
+    
   if headers["CSRF_TOKEN"] then
-    CSRF_TOKEN=headers["CSRF_TOKEN"]
-    -- print("new CSRF_TOKEN="..CSRF_TOKEN)
-    -- if debugging then print("new CSRF_TOKEN") end
+    addToHeader["CSRF_TOKEN"]=headers["CSRF_TOKEN"]
+    --print("CSRF_TOKEN="..addToHeader["CSRF_TOKEN"])
   end
+
+  local temp=string.match(connection:getCookies(),"EQUATE%-CSRF2%-TOKEN%-PARTICIPANT2=([^;]+)")
+  
+  if temp ~= nil then
+    addToHeader["EQUATE-CSRF2-TOKEN-PARTICIPANT2"]=temp
+    addToHeader["EQUATE_SERVICE_BASE_URL"]="https://www.equateplus.com/EquatePlusParticipant2"
+    addToHeader["CSRF_TOKEN"]=nil
+    --print("EQUATE-CSRF2-TOKEN-PARTICIPANT2="..temp)
+    loginSuccess=true
+  end 
+  
   return content
 end
 
@@ -63,139 +56,23 @@ function SupportsBank (protocol, bankCode)
   return  protocol == ProtocolWebBanking and ("EquatePlus" == bankCode:sub(1,#"EquatePlus")) 
 end
 
-function lprint(text)
-  repeat
-    print("  ",string.sub(text,1,60))
-    text=string.sub(text,61)
-  until text == ''
-end
-
-function twritetext(text)
-  if debugging then
-    i=40-string.len(text)
-    if i<0 then i=0 end
-    debugfile:write("\n")
-    debugfile:write(string.rep("#",i).." "..text.." "..string.rep("#",i), "\n")
-    debugfile:write("\n")
-  end 
-end
-
-function makeAnonymous(v,prefix)
-  if anonymous[tostring(v)] ~= nil then
-    return anonymous[tostring(v)]
-  end
-  anonymousCount=anonymousCount+1
-  if prefix == nil then
-    prefix="_V"
-  end 
-  s=prefix..tostring(anonymousCount)
-  anonymous[tostring(v)]=s
-  -- debugfile:write("'",v,"' = ",s,"\n")
-  return s
-end
-
-function writeSecrets()
-  if debug then
-    secretFile=io.open("debug_EquatePlus_secrets.txt","w")
-    for k,v in pairs(anonymous) do
-      if k ~= v then 
-        secretFile:write("'",k,"' = ",v,"\n")
-      end
-    end
-    secretFile:close()
-    anonymous=nil
-  end 
-end
-
-
--- whitelist node names 
-function twritedebugNodes (tbl)
-    for k, v in pairs(tbl) do
-      anonymous[k]=k
-      if type(v) == 'table'  then 
-        twritedebugNodes(v)
-      end
-    end
-end
-
-function twritedebugWorker (tbl, prefix)
-    for k, v in pairs(tbl) do
-      formatting = prefix .."." .. k .. ": "
-      if (type(v) == 'string') then
-        -- debugfile:write(formatting, type(v), "='", v, "'", "\n")
-        if k ~= "id" then
-          debugfile:write(formatting, type(v), "='", makeAnonymous(v), "'", "\n")
-        else
-          debugfile:write(formatting, type(v), "='", makeAnonymous(v,"_I"), "'", "\n")
-        end
-      elseif type(v) == 'table'  then 
-        twritedebugWorker(v,prefix.."."..k)
-      elseif type(v) == 'boolean'  then
-        debugfile:write(formatting,type(v),"=",tostring(v), "\n")
-      elseif type(v) == 'number'  then
-        -- debugfile:write(formatting,type(v).."="..v, "\n")
-        debugfile:write(formatting,type(v),"=",makeAnonymous(v), "\n")
-      else
-        debugfile:write(formatting,type(v), "\n")
-      end
-    end
-end
-
-function twritedebug (tbl, prefix)
-  if debugging then
-    if not prefix then prefix = "" end
-    twritedebugNodes(tbl,prefix)
-    -- remove numbers
-    for v,k in ipairs(anonymous) do
-      anonymous[k]=nil
-    end
-    --for v,k in pairs(anonymous) do
-      --debugfile:write("'",k,"' = ",v,"\n")
-    --end
-    
-    twritedebugWorker(tbl,prefix)
-  end 
-end
-
-function tprint (tbl, indent)
-  if debugging then
-    if not indent then indent = 0 end
-    formatting = string.rep(" ", indent) 
-    for k, v in pairs(tbl) do
-      print(formatting .. k .. ": " .. type(v))
-      if type(v) == 'table' and indent < 15 then 
-        tprint(v,indent+3) 
-      end
-    end
-  end 
-end
-
 function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
 
   if step==1 then
     -- Login.
     baseurl=""
-    debugging=false
     cummulate=false
-    CSRF_TOKEN=nil
-    csrfpId=nil
+    addToHeader={}
     connection = Connection()
-    anonymous={}
-    anonymousCount=0
+    loginSuccess=false
     
-    username=credentials[1]
-    password=credentials[2]
+    local username=credentials[1]
+    local password=credentials[2]
       
     if string.match(bankCode,"cumulative") then
       cummulate=true
     end
     
-    if string.match(bankCode,"Debug") then
-      debugging=true
-      debugfile=io.open("debug_EquatePlus.txt","w")
-      twritetext("Start")
-    end
-
 
     -- get login page
     html = HTML(connectWithCSRF("GET",url))
@@ -214,7 +91,7 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     html:xpath("//*[@id='eqPwdId']"):attr("value", password)
     html:xpath("//*[@id='submitField']"):attr("value","Continue")
     
-    content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
+    local content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
     html= HTML(content)
     
     -- 2.FA cuiMessages
@@ -229,43 +106,33 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
       -- base url
       baseurl=connection:getBaseURL():match('^(.*/)')
       print("baseurl="..baseurl)
-      -- no code = success
-      return nil
     end
 
   else
     -- enter code
     html:xpath("//*[@id='otpCodeId']"):attr("value", credentials[1])
     html:xpath("//*[@id='submitField']"):attr("value","verify")
-    content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
+    local content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
 
     -- base url
     baseurl=connection:getBaseURL():match('^(.*/)')
     print("baseurl="..baseurl)
-
-    if CSRF_TOKEN ~= nil  then
-      return nil
-    else
-      return "Wrong 2FA code!"
-    end
     
   end    
-  
+  if loginSuccess then
+    return nil
+  end
   return LoginFailed  
 end
 
 function ListAccounts (knownAccounts)
   local user=JSON(connectWithCSRF("GET","services/user/get")):dictionary()
-  twritetext("List accounts")
-  twritedebug(user,"ListAccounts:")
   -- Return array of accounts.
   reportOnce=true
-  postfix=""
-  if debug then postfix=" Debug" end
   local account
   local status,err = pcall( function()
     account = {
-      name = "Equateplus "..user["companyId"]..postfix,
+      name = "Equateplus "..user["companyId"],
       --owner = user["participant"]["firstName"]["displayValue"].." "..user["participant"]["lastName"]["displayValue"],
       accountNumber = user["participant"]["userId"],
       bankCode = "equatePlus",
@@ -280,15 +147,11 @@ end
 
 function RefreshAccount (account, since)
   local summary=JSON(connectWithCSRF("GET","services/planSummary/get")):dictionary()
-  twritetext("Summary")
-  twritedebug (summary,"Summary:")
   local securities = {}
   reportOnce=true
   local status,err = pcall( function()
     for k,v in pairs(summary["entries"]) do
       local details=JSON(connectWithCSRF("POST","services/planDetails/get","{\"$type\":\"EntityIdentifier\",\"id\":\""..v["id"].."\"}")):dictionary()
-      twritetext("Details:"..makeAnonymous(v["id"]))
-      twritedebug (details,"Details "..makeAnonymous(v["id"])..":")
       local status,err = pcall( function()
         for k,v in pairs(details["entries"]) do
           -- Required for Allianz Employee Shares
@@ -305,13 +168,13 @@ function RefreshAccount (account, since)
                   local status,err = pcall( function()
                     if(v["ELECTION_CONTRIBUTION_TYPE"])then
                       contribType[k]=v["ELECTION_CONTRIBUTION_TYPE"]
-                      --twritetext("ELECTION_CONTRIBUTION_TYPE exists")
                     end
                     if(v["COST_BASIS"])then
                     
                       -- "date": "2016-02-12T00:00:00.000",
                       local year,month,day=v["ALLOC_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
                       --print (year.."-"..month.."-"..day)
+                      local tradeTimestamp
                       if(year)then
                         tradeTimestamp=os.time({year=year,month=month,day=day})
                       end
@@ -366,7 +229,7 @@ function RefreshAccount (account, since)
 
                       }
                       if cummulate then
-                        name='_'..v["VEHICLE_DESCRIPTION"]
+                        local name='_'..v["VEHICLE_DESCRIPTION"]
                         if securities[name] == nil then
                           security['sumPrice']=security['purchasePrice']*qty
                           securities[name]=security
@@ -394,12 +257,6 @@ function RefreshAccount (account, since)
     end
   end) --pcall
   bugReport(status,err,v,6)
-  twritetext("Results")
-  twritedebug(securities,"Result:")
-  if debugging then
-    debugfile:close()
-    writeSecrets()
-  end  
   return {securities=securities}
 end
 
@@ -411,6 +268,18 @@ function bugReport(status,err,v,identifier)
     print (string.rep('#',25).." 8< please report this bug version="..Version.." identifier="..identifier.." >8 "..string.rep('#',25))
   end
 end
+
+function tprint (tbl, indent)
+    if not indent then indent = 0 end
+    local formatting = string.rep(" ", indent) 
+    for k, v in pairs(tbl) do
+      print(formatting .. k .. ": " .. type(v))
+      if type(v) == 'table' and indent < 15 then 
+        tprint(v,indent+3) 
+      end
+    end
+end
+
 
 function EndSession ()
   -- Logout.
