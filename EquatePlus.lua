@@ -53,12 +53,12 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
   return content
 end
 
-WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cumulative)"},
-  description = "Depot von EquatePlus"}
+WebBanking{version=Version, url=url,services    = {"EquatePlus SE","EquatePlus SE (cumulative)"},
+  description = "SE Depot von EquatePlus"}
 
 
 function SupportsBank (protocol, bankCode)
-  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus"  or bankCode == "EquatePlus (cumulative)") 
+  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus SE"  or bankCode == "EquatePlus SE (cumulative)")
 end
 
 function lprint(text)
@@ -80,7 +80,7 @@ function tprint (tbl, indent)
       end
       if type(v) == 'table' and indent < 9 then tprint(v,indent+3) end
     end
-  end 
+  end
 end
 
 function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
@@ -93,14 +93,14 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     CSRF_TOKEN=nil
     csrfpId=nil
     connection = Connection()
-    
+
     username=credentials[1]
     password=credentials[2]
-      
-    if bankCode == "EquatePlus (cumulative)" then
+
+    if bankCode == "EquatePlus SE (cumulative)" then
       cummulate=true
     end
-    
+
     if string.sub(username,1,1) == '#' then
       print("Debugging, remove # char from username!")
       username=string.sub(username,2)
@@ -130,18 +130,18 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     html:xpath("//*[@id='eqUserId']"):attr("value", username)
     html:xpath("//*[@id='eqPwdId']"):attr("value", password)
     html:xpath("//*[@id='submitField']"):attr("value","Continue")
-    
+
     content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
     html= HTML(content)
-    
+
     -- 2.FA cuiMessages
     if html:xpath("//*[@class='cuiMessageConfirmBorder']"):text() ~= "" then
-      print(html:xpath("//*[@class='cuiMessageConfirmBorder']"):text()) 
+      print(html:xpath("//*[@class='cuiMessageConfirmBorder']"):text())
       return {
         title='Two-factor authentication',
         challenge=html:xpath("//*[@class='cuiMessageConfirmBorder']"):text(),
         label='Code'
-      } 
+      }
     else
       -- base url
       baseurl=connection:getBaseURL():match('^(.*/)')
@@ -165,10 +165,10 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     else
       return "Wrong 2FA code!"
     end
-    
-  end    
-  
-  return LoginFailed  
+
+  end
+
+  return LoginFailed
 end
 
 function ListAccounts (knownAccounts)
@@ -211,24 +211,28 @@ function RefreshAccount (account, since)
                 local marketPrice=v["marketPrice"]["amount"]
                 for k,v in pairs(v["entries"]) do
                   local status,err = pcall( function()
-                    if(v["COST_BASIS"])then
-                      -- "date": "2016-02-12T00:00:00.000",
-                      local year,month,day=v["ALLOC_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
-                      --print (year.."-"..month.."-"..day)
-                      if(year)then
-                        tradeTimestamp=os.time({year=year,month=month,day=day})
-                      end
-                      local qty=0
-                      if v["AVAIL_QTY"] and v["AVAIL_QTY"]["amount"] then
-                        qty=v["AVAIL_QTY"]["amount"]
-                      end
+                    -- SE Edition: COST_BASIS -> SELL_PURCHASE_PRICE
+                    if(v["SELL_PURCHASE_PRICE"])then
+                     -- "date": "2016-02-12T00:00:00.000",
+                     -- SE Edition: ALLOC_DATE -> TRANSACTION_DATE                    
+                     local year,month,day=v["TRANSACTION_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+                     --print (year.."-"..month.."-"..day)
+                     if(year)then
+                       tradeTimestamp=os.time({year=year,month=month,day=day})
+                     end
+                     local qty=0
+                     -- SE Edition: AVAIL_QTY -> QUANTITY
+                     if v["QUANTITY"] and v["QUANTITY"]["amount"] then
+                       qty=v["QUANTITY"]["amount"]
+                     end
 
-                      if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
-                        qty=qty+v["LOCKED_QTY"]["amount"]
-                      end
+                     if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
+                       qty=qty+v["LOCKED_QTY"]["amount"]
+                     end
                       local security={
                         -- String name: Bezeichnung des Wertpapiers
-                        name=v["VEHICLE_DESCRIPTION"],
+                        -- SE Edition: VEHICLE_DESCRIPTION -> VEHICLE
+                        name=v["VEHICLE"],
 
                         -- String isin: ISIN
                         -- String securityNumber: WKN
@@ -251,13 +255,15 @@ function RefreshAccount (account, since)
 
                         -- String currencyOfPrice: Von der Kontowährung abweichende Währung des Preises.
                         -- Number purchasePrice: Kaufpreis oder Kaufkurs
-                        purchasePrice=v["COST_BASIS"]["amount"],
+                        -- SE Edition: COST_BASIS -> SELL_PURCHASE_PRICE
+                        purchasePrice=v["SELL_PURCHASE_PRICE"]["amount"],
 
                       -- String currencyOfPurchasePrice: Von der Kontowährung abweichende Währung des Kaufpreises.
 
                       }
                       if cummulate then
-                        name='_'..v["VEHICLE_DESCRIPTION"]
+                        -- SE Edition: VEHICLE_DESCRIPTION -> VEHICLE
+                        name='_'..v["VEHICLE"]
                         if securities[name] == nil then
                           security['sumPrice']=security['purchasePrice']*qty
                           securities[name]=security
@@ -302,5 +308,16 @@ function EndSession ()
   connectWithCSRF("GET","services/participant/logout")
 end
 
-
-
+-- SE Edition: Debug help - Thanks to https://gist.github.com/ripter/4270799
+-- function dump(o)
+--    if type(o) == 'table' then
+--       local s = '{ '
+--       for k,v in pairs(o) do
+--         if type(k) ~= 'number' then k = '"'..k..'"' end
+--         s = s .. '['..k..'] = ' .. dump(v) .. ','
+--       end
+--       return s .. '} '
+--    else
+--      return tostring(o)
+--    end
+-- end
