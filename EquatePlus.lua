@@ -214,7 +214,7 @@ function RefreshAccount (account, since)
                     -- SE Edition: COST_BASIS -> SELL_PURCHASE_PRICE
                     if(v["SELL_PURCHASE_PRICE"])then
                      -- "date": "2016-02-12T00:00:00.000",
-                     -- SE Edition: ALLOC_DATE -> TRANSACTION_DATE                    
+                     -- SE Edition: ALLOC_DATE -> TRANSACTION_DATE
                      local year,month,day=v["TRANSACTION_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
                      --print (year.."-"..month.."-"..day)
                      if(year)then
@@ -321,3 +321,5 @@ end
 --      return tostring(o)
 --    end
 -- end
+
+-- SIGNATURE: MCwCFARAT5ioTeEaVHLeUj4+W1EAuKY2AhRVC++EoNf0AWvI1zDOPEwiTU9jMw==
