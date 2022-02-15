@@ -209,6 +209,7 @@ function RefreshAccount (account, since)
               local status,err = pcall( function()
                 local marketName=v["marketName"]
                 local marketPrice=v["marketPrice"]["amount"]
+                local pendingShare = (v["canTrade"] == false)
                 for k,v in pairs(v["entries"]) do
                   local status,err = pcall( function()
                     -- SE Edition: allow multiple quantity keywords
@@ -271,6 +272,12 @@ function RefreshAccount (account, since)
                       while nameKey and name == nil do
                         name = v[nameKey.value]
                         nameKey = nameKey.next
+                      end
+
+                      -- feature for future version of MoneyMoney (request confirmed on 2022-02-10 by MRH)
+                      -- requires a property similar to "booked" for accounts
+                      if pendingShare then
+                        print("these shares are not tradable: " .. name)
                       end
 
                       local security = {
