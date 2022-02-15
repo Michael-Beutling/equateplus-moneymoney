@@ -230,6 +230,7 @@ function RefreshAccount (account, since)
 
                     -- SE Edition: allow multiple price keywords
                     local purchasePrice = nil
+                    local currencyOfPrice = nil
                     local priceKeyList = nil
                     priceKeyList = {next = priceKeyList, value = "SELL_PURCHASE_PRICE"}
                     priceKeyList = {next = priceKeyList, value = "COST_BASIS"}
@@ -237,6 +238,7 @@ function RefreshAccount (account, since)
                     while priceKey do
                       if v[priceKey.value] and v[priceKey.value]["amount"] then
                         purchasePrice = v[priceKey.value]["amount"]
+                        currencyOfPrice = v[priceKey.value]["unit"] and v[priceKey.value]["unit"]["code"] or nil
                         break
                       end
                       priceKey = priceKey.next
@@ -295,6 +297,8 @@ function RefreshAccount (account, since)
                         price=marketPrice,
 
                         -- String currencyOfPrice: Von der Kontowährung abweichende Währung des Preises.
+                        currencyOfPrice=currencyOfPrice,
+
                         -- Number purchasePrice: Kaufpreis oder Kaufkurs
                         purchasePrice=purchasePrice,
 
