@@ -211,28 +211,69 @@ function RefreshAccount (account, since)
                 local marketPrice=v["marketPrice"]["amount"]
                 for k,v in pairs(v["entries"]) do
                   local status,err = pcall( function()
-                    -- SE Edition: COST_BASIS -> SELL_PURCHASE_PRICE
-                    if(v["SELL_PURCHASE_PRICE"])then
-                     -- "date": "2016-02-12T00:00:00.000",
-                     -- SE Edition: ALLOC_DATE -> TRANSACTION_DATE
-                     local year,month,day=v["TRANSACTION_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
-                     --print (year.."-"..month.."-"..day)
-                     if(year)then
-                       tradeTimestamp=os.time({year=year,month=month,day=day})
-                     end
-                     local qty=0
-                     -- SE Edition: AVAIL_QTY -> QUANTITY
-                     if v["QUANTITY"] and v["QUANTITY"]["amount"] then
-                       qty=v["QUANTITY"]["amount"]
-                     end
+                    -- SE Edition: allow multiple quantity keywords
+                    local quantityKeyList = nil
+                    quantityKeyList = {next = quantityKeyList, value = "QUANTITY"}
+                    quantityKeyList = {next = quantityKeyList, value = "AVAIL_QTY"}
+                    quantityKeyList = {next = quantityKeyList, value = "LOCKED_QTY"}
+                    quantityKeyList = {next = quantityKeyList, value = "LOCKED_PERF_QTY"}
 
-                     if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
-                       qty=qty+v["LOCKED_QTY"]["amount"]
-                     end
-                      local security={
+                    local quantity = 0
+                    local quantityKey = quantityKeyList
+                    while quantityKey do
+                      if v[quantityKey.value] and v[quantityKey.value]["amount"] then
+                        quantity = v[quantityKey.value]["amount"]
+                        break
+                      end
+                      quantityKey = quantityKey.next
+                    end
+
+                    -- SE Edition: allow multiple price keywords
+                    local purchasePrice = nil
+                    local priceKeyList = nil
+                    priceKeyList = {next = priceKeyList, value = "SELL_PURCHASE_PRICE"}
+                    priceKeyList = {next = priceKeyList, value = "COST_BASIS"}
+                    local priceKey = priceKeyList
+                    while priceKey do
+                      if v[priceKey.value] and v[priceKey.value]["amount"] then
+                        purchasePrice = v[priceKey.value]["amount"]
+                        break
+                      end
+                      priceKey = priceKey.next
+                    end
+
+                    if purchasePrice ~= nil or quantity > 0 then
+                      -- SE Edition: allow multiple date keywords
+                      local tradeTimestamp = nil
+                      local dateKeyList = nil
+                      dateKeyList = {next = dateKeyList, value = "ALLOC_DATE"}
+                      dateKeyList = {next = dateKeyList, value = "TRANSACTION_DATE"}
+                      local dateKey = dateKeyList
+                      while dateKey do
+                        if v[dateKey.value] and v[dateKey.value]["date"] then
+                          -- "date": "2016-02-12T00:00:00.000",
+                          local year, month, day = v[dateKey.value]["date"]:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+                          -- print(year .. "-" .. month .. "-" .. day)
+                          tradeTimestamp=os.time({year=year,month=month,day=day})
+                          break
+                        end
+                        dateKey = dateKey.next
+                      end
+
+                      -- SE Edition: allow multiple name keywords
+                      local name = nil
+                      local nameKeyList = nil
+                      nameKeyList = {next = nameKeyList, value = "VEHICLE"}
+                      nameKeyList = {next = nameKeyList, value = "VEHICLE_DESCRIPTION"}
+                      local nameKey = nameKeyList
+                      while nameKey and name == nil do
+                        name = v[nameKey.value]
+                        nameKey = nameKey.next
+                      end
+
+                      local security = {
                         -- String name: Bezeichnung des Wertpapiers
-                        -- SE Edition: VEHICLE_DESCRIPTION -> VEHICLE
-                        name=v["VEHICLE"],
+                        name=name,
 
                         -- String isin: ISIN
                         -- String securityNumber: WKN
@@ -241,7 +282,7 @@ function RefreshAccount (account, since)
 
                         -- String currency: Währung bei Nominalbetrag oder nil bei Stückzahl
                         -- Number quantity: Nominalbetrag oder Stückzahl
-                        quantity=qty,
+                        quantity=quantity,
 
                         -- Number amount: Wert der Depotposition in Kontowährung
                         -- Number originalCurrencyAmount: Wert der Depotposition in Originalwährung
@@ -255,8 +296,7 @@ function RefreshAccount (account, since)
 
                         -- String currencyOfPrice: Von der Kontowährung abweichende Währung des Preises.
                         -- Number purchasePrice: Kaufpreis oder Kaufkurs
-                        -- SE Edition: COST_BASIS -> SELL_PURCHASE_PRICE
-                        purchasePrice=v["SELL_PURCHASE_PRICE"]["amount"],
+                        purchasePrice=purchasePrice,
 
                       -- String currencyOfPurchasePrice: Von der Kontowährung abweichende Währung des Kaufpreises.
 
@@ -265,12 +305,12 @@ function RefreshAccount (account, since)
                         -- SE Edition: VEHICLE_DESCRIPTION -> VEHICLE
                         name='_'..v["VEHICLE"]
                         if securities[name] == nil then
-                          security['sumPrice']=security['purchasePrice']*qty
+                          security['sumPrice']=security['purchasePrice']*quantity
                           securities[name]=security
                           table.insert(securities,security)
                         else
-                          securities[name]['sumPrice']=securities[name]['sumPrice']+security['purchasePrice']*qty
-                          securities[name]['quantity']=securities[name]['quantity']+qty
+                          securities[name]['sumPrice']=securities[name]['sumPrice']+security['purchasePrice']*quantity
+                          securities[name]['quantity']=securities[name]['quantity']+quantity
                           securities[name]['purchasePrice']=securities[name]['sumPrice']/securities[name]['quantity']
                         end
                       else
@@ -322,4 +362,4 @@ end
 --    end
 -- end
 
--- SIGNATURE: MCwCFARAT5ioTeEaVHLeUj4+W1EAuKY2AhRVC++EoNf0AWvI1zDOPEwiTU9jMw==
+-- SIGNATURE: 
