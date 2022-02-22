@@ -5,13 +5,10 @@ This is a pure personal and private project and has absolutely no relationship t
 
 It may work or not work for other depots.
 
-Released version is now signed and will run in released versions of the MoneyMoney App.
-
 
 ## ToDos
 
-* Union the inital fork and the SE Edition to have one version of the EquatePlus extension
-* Patches, Updates etc. may not be signed immediately  - you need to use Beta Version of MoneyMoney and currently allow unsigned extensions
+* Not signed yet - you need to use Beta Version of MoneyMoney and currently allow unsigned extensions
 
 
 ## Credits 
