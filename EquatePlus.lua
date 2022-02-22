@@ -212,7 +212,7 @@ function RefreshAccount (account, since)
                 local pendingShare = (v["canTrade"] == false)
                 for k,v in pairs(v["entries"]) do
                   local status,err = pcall( function()
-                    -- SE Edition: allow multiple quantity keywords
+                    -- allow multiple quantity keywords
                     local quantityKeyList = nil
                     quantityKeyList = {next = quantityKeyList, value = "QUANTITY"}
                     quantityKeyList = {next = quantityKeyList, value = "AVAIL_QTY"}
@@ -229,7 +229,7 @@ function RefreshAccount (account, since)
                       quantityKey = quantityKey.next
                     end
 
-                    -- SE Edition: allow multiple price keywords
+                    -- allow multiple price keywords
                     local purchasePrice = nil
                     local currencyOfPrice = nil
                     local priceKeyList = nil
@@ -246,7 +246,7 @@ function RefreshAccount (account, since)
                     end
 
                     if purchasePrice ~= nil or quantity > 0 then
-                      -- SE Edition: allow multiple date keywords
+                      -- allow multiple date keywords
                       local tradeTimestamp = nil
                       local dateKeyList = nil
                       dateKeyList = {next = dateKeyList, value = "ALLOC_DATE"}
@@ -263,7 +263,7 @@ function RefreshAccount (account, since)
                         dateKey = dateKey.next
                       end
 
-                      -- SE Edition: allow multiple name keywords
+                      -- allow multiple name keywords
                       local name = nil
                       local nameKeyList = nil
                       nameKeyList = {next = nameKeyList, value = "VEHICLE"}
@@ -313,7 +313,7 @@ function RefreshAccount (account, since)
 
                       }
                       if cummulate then
-                        -- SE Edition: VEHICLE_DESCRIPTION -> VEHICLE
+                        -- VEHICLE_DESCRIPTION -> VEHICLE
                         name='_'..name
                         if securities[name] == nil then
                           security['sumPrice']=security['purchasePrice']*quantity
