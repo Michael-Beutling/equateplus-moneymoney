@@ -53,12 +53,12 @@ function connectWithCSRF(method, url, postContent, postContentType, headers)
   return content
 end
 
-WebBanking{version=Version, url=url,services    = {"EquatePlus SE","EquatePlus SE (cumulative)"},
-  description = "SE Depot von EquatePlus"}
+WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cumulative)"},
+  description = "Depot von EquatePlus"}
 
 
 function SupportsBank (protocol, bankCode)
-  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus SE"  or bankCode == "EquatePlus SE (cumulative)")
+  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus"  or bankCode == "EquatePlus (cumulative)")
 end
 
 function lprint(text)
@@ -97,7 +97,7 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     username=credentials[1]
     password=credentials[2]
 
-    if bankCode == "EquatePlus SE (cumulative)" then
+    if bankCode == "EquatePlus (cumulative)" then
       cummulate=true
     end
 
