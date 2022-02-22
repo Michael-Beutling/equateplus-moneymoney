@@ -314,7 +314,7 @@ function RefreshAccount (account, since)
                       }
                       if cummulate then
                         -- SE Edition: VEHICLE_DESCRIPTION -> VEHICLE
-                        name='_'..v["VEHICLE"]
+                        name='_'..name
                         if securities[name] == nil then
                           security['sumPrice']=security['purchasePrice']*quantity
                           securities[name]=security
