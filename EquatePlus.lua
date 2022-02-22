@@ -3,7 +3,7 @@ local url="https://www.equateplus.com"
 
 local baseurl=""
 local reportOnce
-local Version="1.16"
+local Version="1.17"
 local CSRF_TOKEN=nil
 local csrfpId=nil
 local connection
