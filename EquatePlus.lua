@@ -3,7 +3,7 @@ local url="https://www.equateplus.com"
 
 local baseurl=""
 local reportOnce
-local Version="1.16"
+local Version="1.17"
 local CSRF_TOKEN=nil
 local csrfpId=nil
 local connection
@@ -58,7 +58,7 @@ WebBanking{version=Version, url=url,services    = {"EquatePlus","EquatePlus (cum
 
 
 function SupportsBank (protocol, bankCode)
-  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus"  or bankCode == "EquatePlus (cumulative)") 
+  return  protocol == ProtocolWebBanking and (bankCode == "EquatePlus"  or bankCode == "EquatePlus (cumulative)")
 end
 
 function lprint(text)
@@ -80,7 +80,7 @@ function tprint (tbl, indent)
       end
       if type(v) == 'table' and indent < 9 then tprint(v,indent+3) end
     end
-  end 
+  end
 end
 
 function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
@@ -93,14 +93,14 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     CSRF_TOKEN=nil
     csrfpId=nil
     connection = Connection()
-    
+
     username=credentials[1]
     password=credentials[2]
-      
+
     if bankCode == "EquatePlus (cumulative)" then
       cummulate=true
     end
-    
+
     if string.sub(username,1,1) == '#' then
       print("Debugging, remove # char from username!")
       username=string.sub(username,2)
@@ -130,18 +130,18 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     html:xpath("//*[@id='eqUserId']"):attr("value", username)
     html:xpath("//*[@id='eqPwdId']"):attr("value", password)
     html:xpath("//*[@id='submitField']"):attr("value","Continue")
-    
+
     content, charset, mimeType, filename, headers = connectWithCSRF(html:xpath("//*[@id='loginForm']"):submit())
     html= HTML(content)
-    
+
     -- 2.FA cuiMessages
     if html:xpath("//*[@class='cuiMessageConfirmBorder']"):text() ~= "" then
-      print(html:xpath("//*[@class='cuiMessageConfirmBorder']"):text()) 
+      print(html:xpath("//*[@class='cuiMessageConfirmBorder']"):text())
       return {
         title='Two-factor authentication',
         challenge=html:xpath("//*[@class='cuiMessageConfirmBorder']"):text(),
         label='Code'
-      } 
+      }
     else
       -- base url
       baseurl=connection:getBaseURL():match('^(.*/)')
@@ -165,10 +165,10 @@ function InitializeSession2 (protocol, bankCode, step, credentials, interactive)
     else
       return "Wrong 2FA code!"
     end
-    
-  end    
-  
-  return LoginFailed  
+
+  end
+
+  return LoginFailed
 end
 
 function ListAccounts (knownAccounts)
@@ -209,26 +209,80 @@ function RefreshAccount (account, since)
               local status,err = pcall( function()
                 local marketName=v["marketName"]
                 local marketPrice=v["marketPrice"]["amount"]
+                local pendingShare = (v["canTrade"] == false)
                 for k,v in pairs(v["entries"]) do
                   local status,err = pcall( function()
-                    if(v["COST_BASIS"])then
-                      -- "date": "2016-02-12T00:00:00.000",
-                      local year,month,day=v["ALLOC_DATE"]["date"]:match ( "^(%d%d%d%d)%-(%d%d)%-(%d%d)")
-                      --print (year.."-"..month.."-"..day)
-                      if(year)then
-                        tradeTimestamp=os.time({year=year,month=month,day=day})
+                    -- allow multiple quantity keywords
+                    local quantityKeyList = nil
+                    quantityKeyList = {next = quantityKeyList, value = "QUANTITY"}
+                    quantityKeyList = {next = quantityKeyList, value = "AVAIL_QTY"}
+                    quantityKeyList = {next = quantityKeyList, value = "LOCKED_QTY"}
+                    quantityKeyList = {next = quantityKeyList, value = "LOCKED_PERF_QTY"}
+
+                    local quantity = 0
+                    local quantityKey = quantityKeyList
+                    while quantityKey do
+                      if v[quantityKey.value] and v[quantityKey.value]["amount"] then
+                        quantity = v[quantityKey.value]["amount"]
+                        break
                       end
-                      local qty=0
-                      if v["AVAIL_QTY"] and v["AVAIL_QTY"]["amount"] then
-                        qty=v["AVAIL_QTY"]["amount"]
+                      quantityKey = quantityKey.next
+                    end
+
+                    -- allow multiple price keywords
+                    local purchasePrice = nil
+                    local currencyOfPrice = nil
+                    local priceKeyList = nil
+                    priceKeyList = {next = priceKeyList, value = "SELL_PURCHASE_PRICE"}
+                    priceKeyList = {next = priceKeyList, value = "COST_BASIS"}
+                    local priceKey = priceKeyList
+                    while priceKey do
+                      if v[priceKey.value] and v[priceKey.value]["amount"] then
+                        purchasePrice = v[priceKey.value]["amount"]
+                        currencyOfPrice = v[priceKey.value]["unit"] and v[priceKey.value]["unit"]["code"] or nil
+                        break
+                      end
+                      priceKey = priceKey.next
+                    end
+
+                    if purchasePrice ~= nil or quantity > 0 then
+                      -- allow multiple date keywords
+                      local tradeTimestamp = nil
+                      local dateKeyList = nil
+                      dateKeyList = {next = dateKeyList, value = "ALLOC_DATE"}
+                      dateKeyList = {next = dateKeyList, value = "TRANSACTION_DATE"}
+                      local dateKey = dateKeyList
+                      while dateKey do
+                        if v[dateKey.value] and v[dateKey.value]["date"] then
+                          -- "date": "2016-02-12T00:00:00.000",
+                          local year, month, day = v[dateKey.value]["date"]:match("^(%d%d%d%d)%-(%d%d)%-(%d%d)")
+                          -- print(year .. "-" .. month .. "-" .. day)
+                          tradeTimestamp=os.time({year=year,month=month,day=day})
+                          break
+                        end
+                        dateKey = dateKey.next
                       end
 
-                      if v["LOCKED_QTY"] and v["LOCKED_QTY"]["amount"] then
-                        qty=qty+v["LOCKED_QTY"]["amount"]
+                      -- allow multiple name keywords
+                      local name = nil
+                      local nameKeyList = nil
+                      nameKeyList = {next = nameKeyList, value = "VEHICLE"}
+                      nameKeyList = {next = nameKeyList, value = "VEHICLE_DESCRIPTION"}
+                      local nameKey = nameKeyList
+                      while nameKey and name == nil do
+                        name = v[nameKey.value]
+                        nameKey = nameKey.next
                       end
-                      local security={
+
+                      -- feature for future version of MoneyMoney (request confirmed on 2022-02-10 by MRH)
+                      -- requires a property similar to "booked" for accounts
+                      if pendingShare then
+                        print("these shares are not tradable: " .. name)
+                      end
+
+                      local security = {
                         -- String name: Bezeichnung des Wertpapiers
-                        name=v["VEHICLE_DESCRIPTION"],
+                        name=name,
 
                         -- String isin: ISIN
                         -- String securityNumber: WKN
@@ -237,7 +291,7 @@ function RefreshAccount (account, since)
 
                         -- String currency: Währung bei Nominalbetrag oder nil bei Stückzahl
                         -- Number quantity: Nominalbetrag oder Stückzahl
-                        quantity=qty,
+                        quantity=quantity,
 
                         -- Number amount: Wert der Depotposition in Kontowährung
                         -- Number originalCurrencyAmount: Wert der Depotposition in Originalwährung
@@ -250,21 +304,24 @@ function RefreshAccount (account, since)
                         price=marketPrice,
 
                         -- String currencyOfPrice: Von der Kontowährung abweichende Währung des Preises.
+                        currencyOfPrice=currencyOfPrice,
+
                         -- Number purchasePrice: Kaufpreis oder Kaufkurs
-                        purchasePrice=v["COST_BASIS"]["amount"],
+                        purchasePrice=purchasePrice,
 
                       -- String currencyOfPurchasePrice: Von der Kontowährung abweichende Währung des Kaufpreises.
 
                       }
                       if cummulate then
-                        name='_'..v["VEHICLE_DESCRIPTION"]
+                        -- VEHICLE_DESCRIPTION -> VEHICLE
+                        name='_'..name
                         if securities[name] == nil then
-                          security['sumPrice']=security['purchasePrice']*qty
+                          security['sumPrice']=security['purchasePrice']*quantity
                           securities[name]=security
                           table.insert(securities,security)
                         else
-                          securities[name]['sumPrice']=securities[name]['sumPrice']+security['purchasePrice']*qty
-                          securities[name]['quantity']=securities[name]['quantity']+qty
+                          securities[name]['sumPrice']=securities[name]['sumPrice']+security['purchasePrice']*quantity
+                          securities[name]['quantity']=securities[name]['quantity']+quantity
                           securities[name]['purchasePrice']=securities[name]['sumPrice']/securities[name]['quantity']
                         end
                       else
@@ -302,5 +359,18 @@ function EndSession ()
   connectWithCSRF("GET","services/participant/logout")
 end
 
+-- SE Edition: Debug help - Thanks to https://gist.github.com/ripter/4270799
+-- function dump(o)
+--    if type(o) == 'table' then
+--       local s = '{ '
+--       for k,v in pairs(o) do
+--         if type(k) ~= 'number' then k = '"'..k..'"' end
+--         s = s .. '['..k..'] = ' .. dump(v) .. ','
+--       end
+--       return s .. '} '
+--    else
+--      return tostring(o)
+--    end
+-- end
 
-
+-- SIGNATURE: 
